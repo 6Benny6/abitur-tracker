@@ -1,5 +1,5 @@
 // Offline support: serve from network when online (always fresh), fall back to cache.
-const CACHE = 'abitur-v1';
+const CACHE = 'abitur-v2';
 const FILES = ['./', 'index.html', 'css/styles.css', 'js/app.js', 'js/ui.js', 'js/rules.js', 'js/state.js',
   'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-180.png'];
 

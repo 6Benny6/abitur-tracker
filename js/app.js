@@ -4,7 +4,8 @@ import { load, save, exportJSON, importJSON, reset, uid } from './state.js';
 import * as V from './ui.js';
 
 let state = load();
-const ui = { tab: 'overview', sheet: null };
+const ui = { tab: 'overview', sheet: null, openGroups: new Set() };
+let opener = null; // selector of the control that opened the sheet
 const $view = document.getElementById('view');
 const $sheet = document.getElementById('sheet');
 const $sheetBody = document.getElementById('sheet-body');
@@ -24,7 +25,7 @@ applyTheme();
 /* ---------- render ---------- */
 function render() {
   const calc = computeAll(state);
-  const views = { overview: V.overview, courses: V.courses, plan: V.plan };
+  const views = { overview: V.overview, courses: V.courses, plan: (st, c) => V.plan(st, c, ui.openGroups) };
   const scroll = window.scrollY;
   $view.innerHTML = ui.tab === 'settings' ? V.settings(state, theme) : views[ui.tab](state, calc);
   window.scrollTo(0, scroll);
@@ -32,13 +33,18 @@ function render() {
     if (b.dataset.tab === ui.tab) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
   });
   if (ui.sheet) {
+    const wasHidden = $sheet.hidden;
     const top = $sheet.querySelector('.sheet-panel').scrollTop;
     $sheetBody.innerHTML = V.semesterSheet(state, calc, ui.sheet);
     $sheet.hidden = false;
     $sheet.querySelector('.sheet-panel').scrollTop = top;
-    document.getElementById('add-label')?.focus({ preventScroll: true });
-  } else {
+    const label = document.getElementById('add-label');
+    if (label) label.focus({ preventScroll: true });
+    else if (wasHidden) document.getElementById('sheet-title')?.focus({ preventScroll: true });
+  } else if (!$sheet.hidden) {
     $sheet.hidden = true;
+    if (opener) document.querySelector(opener)?.focus({ preventScroll: true });
+    opener = null;
   }
 }
 
@@ -73,7 +79,7 @@ function defaultMode(sid, q) {
 const actions = {
   tab: (d) => { ui.tab = d.tab; window.scrollTo(0, 0); render(); },
 
-  'open-sem': (d) => { ui.sheet = { sid: d.sid, q: d.q, mode: defaultMode(d.sid, d.q), adding: null, target: null }; render(); },
+  'open-sem': (d) => { opener = `[data-act="open-sem"][data-sid="${d.sid}"][data-q="${d.q}"]`; ui.sheet = { sid: d.sid, q: d.q, mode: defaultMode(d.sid, d.q), adding: null, target: null }; render(); },
   'sem-mode': (d) => { ui.sheet.mode = d.m; ui.sheet.adding = null; render(); },
   'set-final': (d) => { sem(d.sid, d.q).final = +d.v; commit(); },
   'clear-final': (d) => { delete sem(d.sid, d.q).final; commit(); },
@@ -105,6 +111,7 @@ const actions = {
     ui.sheet.target = clamp((parseInt(cur, 10) || 12) + +d.d); render();
   },
 
+  'toggle-group': (d) => { ui.openGroups.has(d.q) ? ui.openGroups.delete(d.q) : ui.openGroups.add(d.q); render(); },
   'set-target': (d) => { state.settings.target = +d.v; commit(); },
   'step-plan': (d) => {
     const c = computeAll(state).courses.find((x) => x.key === `${d.sid}:${d.q}`);
@@ -197,7 +204,15 @@ document.addEventListener('change', async (ev) => {
 });
 
 document.addEventListener('keydown', (ev) => {
-  if (ev.key === 'Escape' && ui.sheet) { ui.sheet = null; render(); }
+  if (!ui.sheet) return;
+  if (ev.key === 'Escape') { ui.sheet = null; render(); return; }
+  if (ev.key === 'Tab') { // keep focus inside the open sheet
+    const f = [...$sheet.querySelectorAll('button, input, select, [tabindex="0"]')].filter((el) => !el.disabled && el.offsetParent);
+    if (!f.length) return;
+    const first = f[0], last = f[f.length - 1];
+    if (ev.shiftKey && (document.activeElement === first || !$sheet.contains(document.activeElement))) { ev.preventDefault(); last.focus(); }
+    else if (!ev.shiftKey && document.activeElement === last) { ev.preventDefault(); first.focus(); }
+  }
 });
 
 render();

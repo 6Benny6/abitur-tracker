@@ -136,7 +136,7 @@ export function courses(state, calc) {
       <span style="font-weight:600;color:var(--text)">12 final</span>
       <span style="color:var(--accent)">12 live</span>
       <span style="font-style:italic">12 planned</span>
-      <span style="color:var(--faint)">11 assumed</span>
+      <span style="color:var(--muted);font-size:11px">11 assumed</span>
       <span style="text-decoration:line-through">not counted</span>
     </div>
     <p class="muted small">Tap a cell to enter a final grade, single marks, or an estimate. The best ${RULES.blockI.courses} semesters are counted automatically (LK semesters double).</p>
@@ -156,7 +156,7 @@ export function semesterSheet(state, calc, ui) {
   const attrs = `data-sid="${s.id}" data-q="${q}"`;
 
   const head = `
-    <h3 class="sheet-title">${esc(s.name)} · ${q}</h3>
+    <h3 class="sheet-title" id="sheet-title" tabindex="-1">${esc(s.name)} · ${q}</h3>
     <p class="muted small" style="margin:4px 0 14px">${s.type} · Klausur ${pct(wK)} / other ${pct(1 - wK)} ·
       counts now: <strong style="color:var(--text)">${c ? pp(c.points) : '–'}</strong> (${c ? STATUS_LABEL[c.status] : '–'}${c && !c.counted ? ', not counted' : ''})</p>
     <div class="seg" role="group">
@@ -238,9 +238,9 @@ function marksBody(s, sem, wK, ui, attrs) {
     solver = `<h2>What do I need?</h2>
       <div class="rows">
         <div class="row"><span>Target semester points</span>${stepper(target, 'sem-target', '')}</div>
-        ${k !== null ? line(`Other Ø needed <span class="muted small">now ${f1(o)}</span>`, nO) : ''}
+        ${k !== null ? line(`Other Ø needed<span class="row-sub">now ${f1(o)}</span>`, nO) : ''}
         ${k !== null && o !== null ? line('Next other mark (×1)', neededNextMark(sem, wK, target, 'O', 1)) : ''}
-        ${o !== null ? line(`Klausur Ø needed <span class="muted small">now ${f1(k)}</span>`, nK) : ''}
+        ${o !== null ? line(`Klausur Ø needed<span class="row-sub">now ${f1(k)}</span>`, nK) : ''}
         ${k !== null ? line('Next Klausur', neededNextMark(sem, wK, target, 'K', 1)) : ''}
       </div>
       <p class="muted small">Assumes the teacher weights exactly ${pct(wK)} / ${pct(1 - wK)} and rounds x.5 up.</p>`;
@@ -255,7 +255,7 @@ function marksBody(s, sem, wK, ui, attrs) {
 
 /* ---------------- Plan ---------------- */
 
-export function plan(state, calc) {
+export function plan(state, calc, openGroups = new Set()) {
   const target = state.settings.target ?? 769;
   const req = requiredUniformLevel(state, target);
   const map = new Map(calc.courses.map((c) => [c.key, c]));
@@ -273,8 +273,9 @@ export function plan(state, calc) {
   }
 
   const diff = calc.total - target;
-  const openRows = [];
+  const groups = {};
   for (const q of RULES.semesters) {
+    const openRows = (groups[q] = []);
     for (const s of state.subjects) {
       const sem = s.semesters?.[q] || {};
       if (isNum(sem.final)) continue;
@@ -309,8 +310,12 @@ export function plan(state, calc) {
     </div>
     ${req.reachable && req.level > 0 ? `<div class="actions"><button class="btn" data-act="fill-open" data-v="${Math.ceil(req.level)}">Set unplanned items to ${pp(Math.ceil(req.level))}</button></div>` : ''}
 
-    <h2>Open semesters</h2>
-    <div class="rows">${openRows.join('') || '<div class="row muted">All semesters final</div>'}</div>
+    ${Object.entries(groups).filter(([, r]) => r.length).map(([q, r], i) => {
+      const open = i === 0 || openGroups.has(q);
+      return `<button class="group-toggle" data-act="toggle-group" data-q="${q}" aria-expanded="${open}">
+          <h2>${q} · ${r.length} open</h2><span class="muted small">${open ? 'Hide' : 'Show'}</span></button>
+        ${open ? `<div class="rows">${r.join('')}</div>` : ''}`;
+    }).join('') || '<h2>Open semesters</h2><div class="rows"><div class="row muted">All semesters final</div></div>'}
 
     <h2>Exams · Block II</h2>
     <div class="rows">${examRows}</div>
@@ -327,16 +332,16 @@ export function settings(state, theme) {
         <input type="text" value="${esc(s.name)}" data-field="name" data-sid="${s.id}" aria-label="Subject name" style="flex:1;min-width:140px">
         <div class="seg" style="width:110px">${['LK', 'GK'].map((t) => `<button data-act="set-type" data-t="${t}" data-sid="${s.id}" aria-pressed="${s.type === t}">${t}</button>`).join('')}</div>
       </div>
-      <div class="line small muted">
-        <label>Klausur share
-          <select data-field="wK" data-sid="${s.id}" style="width:auto;margin-left:4px">
+      <div class="meta">
+        <label>Klausur
+          <select data-field="wK" data-sid="${s.id}">
             ${[0.25, 1 / 3, 0.4, 0.5, 0.6].map((w) => `<option value="${w}" ${Math.abs(wKof(s) - w) < 1e-6 ? 'selected' : ''}>${pct(w)}</option>`).join('')}
           </select></label>
         <label>Must count
-          <select data-field="minCount" data-sid="${s.id}" style="width:auto;margin-left:4px" ${s.type === 'LK' ? 'disabled' : ''}>
+          <select data-field="minCount" data-sid="${s.id}" ${s.type === 'LK' ? 'disabled' : ''}>
             ${[0, 1, 2, 3, 4].map((n) => `<option value="${n}" ${(s.type === 'LK' ? 4 : s.minCount ?? 0) === n ? 'selected' : ''}>${n}</option>`).join('')}
           </select></label>
-        <button class="btn link danger" data-act="del-subject" data-sid="${s.id}" style="margin-left:auto">Remove</button>
+        <button class="x" data-act="del-subject" data-sid="${s.id}" aria-label="Remove ${esc(s.name)}">×</button>
       </div>
     </div>`).join('');
 
