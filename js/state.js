@@ -5,8 +5,22 @@ export const SCHEMA = 1;
 
 export const uid = () => Math.random().toString(36).slice(2, 9);
 
+export const ALL_Q = ['Q1', 'Q2', 'Q3', 'Q4'];
+
 function subject(name, type = 'GK', minCount = 0) {
-  return { id: uid(), name, type, wK: type === 'LK' ? 0.5 : 1 / 3, minCount, semesters: {} };
+  return { id: uid(), name, type, wK: type === 'LK' ? 0.5 : 1 / 3, minCount, taken: [...ALL_Q], semesters: {} };
+}
+
+/** Bring older saved data up to date (v1.2 used `droppedAfter`). */
+export function migrate(s) {
+  for (const sub of s.subjects) {
+    if (!Array.isArray(sub.taken)) {
+      const last = sub.droppedAfter ? ALL_Q.indexOf(sub.droppedAfter) : 3;
+      sub.taken = ALL_Q.slice(0, last + 1);
+    }
+    delete sub.droppedAfter;
+  }
+  return s;
 }
 
 export function defaultState() {
@@ -21,6 +35,8 @@ export function defaultState() {
     subject('French', 'GK', 0),
     subject('Art', 'GK', 0),
     subject('Sport', 'GK', 0),
+    subject('Geography', 'GK', 0),
+    subject('Music', 'GK', 0),
   ];
   const [en, ma, de] = subjects;
   return {
@@ -47,7 +63,7 @@ export function load() {
     const raw = localStorage.getItem(KEY);
     if (raw) {
       const s = JSON.parse(raw);
-      if (valid(s)) return s;
+      if (valid(s)) return migrate(s);
     }
   } catch { /* storage blocked or corrupt: fall through */ }
   return defaultState();
@@ -71,7 +87,7 @@ export function importJSON(text) {
   const s = JSON.parse(text);
   if (!valid(s)) throw new Error('Not a tracker backup file.');
   delete s.exportedAt;
-  return s;
+  return migrate(s);
 }
 
 export function reset() {

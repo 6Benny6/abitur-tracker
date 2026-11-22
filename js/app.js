@@ -165,7 +165,7 @@ const actions = {
     const s = subj(d.sid); s.type = d.t; s.wK = d.t === 'LK' ? 0.5 : 1 / 3; commit();
   },
   'add-subject': () => {
-    state.subjects.push({ id: uid(), name: 'New subject', type: 'GK', wK: 1 / 3, minCount: 0, semesters: {} }); commit();
+    state.subjects.push({ id: uid(), name: 'New subject', type: 'GK', wK: 1 / 3, minCount: 0, taken: [...RULES.semesters], semesters: {} }); commit();
   },
   'del-subject': (d) => {
     const s = subj(d.sid);
@@ -175,6 +175,13 @@ const actions = {
     commit();
   },
   'step-assume': (d) => { state.settings.assume = clamp(state.settings.assume + +d.d); commit(); },
+  'toggle-taken': (d) => {
+    const s = subj(d.sid);
+    const t = new Set(s.taken || RULES.semesters);
+    t.has(d.q) ? t.delete(d.q) : t.add(d.q);
+    s.taken = RULES.semesters.filter((q) => t.has(q));
+    commit();
+  },
   'set-strike': (d) => { sem(d.sid, d.q).strike = d.v; commit(); },
   'set-haptics': (d) => { state.settings.haptics = d.v === 'on'; setHaptics(hapticsOn()); commit(); if (hapticsOn()) haptic(); },
   'set-theme': (d) => {
@@ -227,7 +234,6 @@ document.addEventListener('change', async (ev) => {
   if (f === 'name') { subj(el.dataset.sid).name = el.value.trim() || 'Subject'; }
   else if (f === 'wK') { subj(el.dataset.sid).wK = +el.value; }
   else if (f === 'minCount') { subj(el.dataset.sid).minCount = +el.value; }
-  else if (f === 'droppedAfter') { subj(el.dataset.sid).droppedAfter = el.value || null; haptic(); }
   else if (f === 'exam-label') { state.exams.find((e) => e.id === el.dataset.id).label = el.value.trim() || 'Exam'; }
   else if (f === 'exam-subject') { state.exams.find((e) => e.id === el.dataset.id).subjectId = el.value || null; }
   else if (f === 'exam-final') { state.exams.find((e) => e.id === el.dataset.id).planned = !el.checked; }

@@ -8,8 +8,8 @@ Phone-first tracker for the Berlin Abitur (VO-GO): shows the projected final gra
 3. **Courses** → tap a cell → enter a final grade (Q1/Q2), single marks (Q3) or an estimate (Q4).
 4. **Overview** → projected grade, Block I/II, cheapest next points.
 5. **Plan** → pick a target, see the average you need, play with what-if values.
-6. **Settings** → edit subjects, LK/GK, Klausur share, exams, "Dropped after" (Abwahl), haptics. **Export a backup** regularly.
-7. **Strike / force a semester**: tap a grade cell → *Counts in Block I*: Auto · Count · Strike. The overview shows how many strikes are possible.
+6. **Settings** → edit subjects, LK/GK, Klausur share, exams, "Taken" chips per subject (untick semesters you did not take / dropped), haptics. **Export a backup** regularly.
+7. **Strike / force a semester**: tap a grade cell → *Counts in Block I*: Auto · Count · Strike. Strikes possible = semesters taken − 40 (48 taken = 8 strikes). When all are used, Strike is disabled.
 
 Your grades are stored only in your phone's browser, never in this repository.
 

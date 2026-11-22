@@ -24,14 +24,18 @@ const DEMO = `
   try { if (localStorage.getItem(K)) return; } catch { return; }
   const s = __state.defaultState();
   s.settings.assume = 12;
-  const fin = { English: [13, 14], Mathematics: [12, 13], German: [12, 11], History: [13, 12], Politics: [12, 13], Biology: [11, 12], Physics: [10, 11], French: [12, 12], Art: [14, 14], Sport: [13, 13] };
+  const fin = { English: [13, 14], Mathematics: [12, 13], German: [12, 11], History: [13, 12], Politics: [12, 13], Biology: [11, 12], Physics: [10, 11], French: [12, 12], Art: [14, 14], Sport: [13, 13], Geography: [9, 10], Music: [12, 12] };
   for (const sub of s.subjects) { const [a, c] = fin[sub.name] || [12, 12]; sub.semesters.Q1 = { final: a }; sub.semesters.Q2 = { final: c }; }
   const by = (n) => s.subjects.find((x) => x.name === n);
   const it = (id, kind, points, label) => ({ id, kind, points, label, weight: 1 });
   by('History').semesters.Q3 = { items: [it('a', 'K', 6, 'Klausur 1'), it('b', 'O', 12, 'Oral')] };
   by('Mathematics').semesters.Q3 = { items: [it('c', 'K', 11, 'Klausur 1'), it('d', 'O', 13, 'Oral')] };
   by('English').semesters.Q3 = { items: [it('e', 'K', 14, 'Klausur 1'), it('f', 'O', 13, 'Oral')] };
-  s.subjects.push({ id: 'chem', name: 'Chemistry', type: 'GK', wK: 1 / 3, minCount: 0, droppedAfter: 'Q2', semesters: { Q1: { final: 9 }, Q2: { final: 10 } } });
+  // Philosophy in Q1/Q2, then swapped for Music in Q3/Q4: still 48 semesters taken = 8 strikes
+  by('Music').taken = ['Q3', 'Q4'];
+  delete by('Music').semesters.Q1; delete by('Music').semesters.Q2;
+  s.subjects.push({ id: 'phil', name: 'Philosophy', type: 'GK', wK: 1 / 3, minCount: 0, taken: ['Q1', 'Q2'], semesters: { Q1: { final: 12 }, Q2: { final: 11 } } });
+  by('Physics').semesters.Q1.strike = 'strike';
   try { localStorage.setItem(K, JSON.stringify(s)); } catch {}
 })();`;
 

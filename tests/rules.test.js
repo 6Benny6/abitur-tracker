@@ -149,3 +149,24 @@ test('must-count violation warns', () => {
   st.subjects[2].semesters.Q1 = { final: 12, strike: 'strike' };
   assert.match(computeAll(st).warnings.join(' '), /3 of 4 required/);
 });
+
+test('not-taken semesters vanish and reduce strikes', () => {
+  const st = makeState(12, 13, 12); // 12 subjects x 4 = 48 taken
+  assert.equal(computeAll(st).strikes.possible, 8);
+  assert.equal(computeAll(st).strikes.taken, 48);
+  st.subjects[11].taken = ['Q1', 'Q2', 'Q4']; // not taken in Q3
+  const all = computeAll(st);
+  assert.equal(all.courses.some((c) => c.key === 'g9:Q3'), false);
+  assert.equal(all.strikes.possible, 7);
+});
+
+test('migration: droppedAfter becomes taken', async () => {
+  const { migrate, defaultState } = await import('../js/state.js');
+  const s = { subjects: [{ id: 'x', droppedAfter: 'Q2', semesters: {} }, { id: 'y', semesters: {} }], exams: [], settings: {} };
+  migrate(s);
+  assert.deepEqual(s.subjects[0].taken, ['Q1', 'Q2']);
+  assert.equal('droppedAfter' in s.subjects[0], false);
+  assert.deepEqual(s.subjects[1].taken, ['Q1', 'Q2', 'Q3', 'Q4']);
+  // the default template gives 8 strikes
+  assert.equal(computeAll(defaultState()).strikes.possible, 8);
+});

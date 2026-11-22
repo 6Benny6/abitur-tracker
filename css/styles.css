@@ -217,7 +217,8 @@ label.check input { width: 18px; height: 18px; accent-color: var(--accent); }
 .subject-edit .meta { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; font-size: 13px; color: var(--muted); }
 .subject-edit .meta select { width: auto; margin-left: 4px; }
 .subject-edit .meta .x { margin-left: auto; }
-.subject-edit.dropped input[type="text"] { color: var(--muted); }
+.subject-edit .meta.taken { gap: 10px; }
+.subject-edit .meta.taken .chips button { min-height: 40px; min-width: 48px; padding: 0 10px; }
 .group-toggle { display: flex; width: 100%; justify-content: space-between; align-items: center; background: none; border: 0; padding: 0; margin: 32px 0 10px; min-height: var(--tap); }
 .group-toggle h2 { margin: 0; }
 .group-toggle .muted { transition: transform .2s; }

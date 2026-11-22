@@ -42,6 +42,15 @@ function seg(key, options, current, act, dataKey, attrs = '', style = '') {
   </div>`;
 }
 
+function takenHint(s) {
+  const t = s.taken || RULES.semesters;
+  const missing = RULES.semesters.filter((q) => !t.includes(q));
+  if (!missing.length) return '';
+  const last = t.length ? RULES.semesters.indexOf(t[t.length - 1]) : -1;
+  const prefix = t.every((q, i) => q === RULES.semesters[i]);
+  return prefix && t.length ? `dropped after ${RULES.semesters[last]}` : `not taken: ${missing.join(', ')}`;
+}
+
 /* ---------------- Overview ---------------- */
 
 export function overview(state, calc) {
@@ -104,7 +113,7 @@ export function overview(state, calc) {
         <div class="row-sub" style="margin-top:6px">${b2.list.map((e) => pp(e.value)).join(' · ')} × ${RULES.blockII.multiplier}</div>
       </div>
       <button class="row" data-act="tab" data-tab="courses"><span>Strikes<span class="row-sub">semesters not counted in Block I</span></span>
-        <span>${strikes.possible} possible<span class="row-sub">${strikes.manual} manual · ${strikes.auto} auto</span></span></button>
+        <span><strong>${strikes.possible}</strong> possible<span class="row-sub">${strikes.taken} taken − ${RULES.blockI.courses} · ${strikes.manual} by you · ${strikes.auto} auto</span></span></button>
     </div>
 
     <h2>Basis of projection</h2>
@@ -129,7 +138,7 @@ export function courses(state, calc) {
   const map = new Map(calc.courses.map((c) => [c.key, c]));
   const rows = state.subjects.map((s) => {
     const cells = RULES.semesters.map((q) => {
-      if (!semesterExists(s, q)) return `<td><button class="cell" disabled aria-label="${esc(s.name)} ${q}: dropped">—</button></td>`;
+      if (!semesterExists(s, q)) return `<td><button class="cell" disabled aria-label="${esc(s.name)} ${q}: not taken">—</button></td>`;
       const c = map.get(`${s.id}:${q}`);
       const v = c ? pp(c.points) : '·';
       const m = c?.mode && c.mode !== 'auto' ? c.mode : '';
@@ -137,7 +146,7 @@ export function courses(state, calc) {
         data-s="${c?.status ?? 'assumed'}" data-c="${c?.counted ? 1 : 0}" ${m ? `data-m="${m}"` : ''}
         aria-label="${esc(s.name)} ${q}: ${v}, ${c?.status ?? ''}${c && !c.counted ? ', not counted' : ''}${m ? `, ${m} set manually` : ''}">${v}</button></td>`;
     }).join('');
-    return `<tr><td class="name">${esc(s.name)}${s.type === 'LK' ? '<small>LK</small>' : ''}${s.droppedAfter ? `<em>dropped after ${s.droppedAfter}</em>` : ''}</td>${cells}</tr>`;
+    return `<tr><td class="name">${esc(s.name)}${s.type === 'LK' ? '<small>LK</small>' : ''}${takenHint(s) ? `<em>${takenHint(s)}</em>` : ''}</td>${cells}</tr>`;
   }).join('');
   return `
     <h1>Courses</h1>
@@ -153,6 +162,7 @@ export function courses(state, calc) {
       <span style="text-decoration:line-through">struck</span>
       <span><b style="color:var(--bad);font-size:10px">S</b> struck by you</span>
       <span><b style="color:var(--accent);font-size:8px">●</b> forced to count</span>
+      <span>— not taken</span>
     </div>
     <p class="muted small">Tap a cell to enter grades or to strike / force a semester. ${calc.strikes.possible} strikes possible: the best ${RULES.blockI.courses} semesters count (LK semesters double).</p>
   `;
@@ -190,13 +200,15 @@ export function semesterSheet(state, calc, ui) {
   }
   const overridden = mode !== 'final' && isNum(sem.final)
     ? `<div class="callout small">Final grade ${pp(sem.final)} is set and overrides this. Clear it under Final grade.</div>` : '';
-  return head + overridden + body + strikeSection(state, s, q, attrs);
+  return head + overridden + body + strikeSection(state, calc, s, q, attrs);
 }
 
-function strikeSection(state, s, q, attrs) {
+function strikeSection(state, calc, s, q, attrs) {
   const sem = s.semesters?.[q] || {};
   const lk = s.type === 'LK';
   const cur = lk ? 'auto' : (sem.strike || 'auto');
+  const { manual, possible } = calc.strikes;
+  const noneLeft = !lk && cur !== 'strike' && manual >= possible;
   // live effect of each option on Block I
   const effect = ['auto', 'count', 'strike'].map((m) => {
     if (lk && m === 'strike') return '<span>–</span>';
@@ -207,9 +219,11 @@ function strikeSection(state, s, q, attrs) {
     return `<span>Block I <b>${r.points}</b>${r.count < RULES.blockI.courses ? `<br><span class="bad">only ${r.count} courses</span>` : ''}</span>`;
   }).join('');
   return `<h2>Counts in Block I</h2>
-    ${seg('strike', [['auto', 'Auto'], ['count', 'Count'], ['strike', 'Strike', lk]], cur, 'set-strike', 'v', attrs)}
+    ${seg('strike', [['auto', 'Auto'], ['count', 'Count'], ['strike', 'Strike', lk || noneLeft]], cur, 'set-strike', 'v', attrs)}
     <div class="effect">${effect}</div>
-    <p class="muted small">${lk ? 'LK semesters always count (double).' : 'Auto = counted only if it is among your best semesters. Strike = never counts. Count = always counts.'}</p>`;
+    <p class="muted small">${lk ? 'LK semesters always count (double).'
+      : noneLeft ? `<span class="bad">All ${possible} strikes used.</span> Un-strike another semester first.`
+      : `Strikes used by you: ${manual} of ${possible}. Auto = counted only if it is among your best ${RULES.blockI.courses}. Strike = never counts. Count = always counts.`}</p>`;
 }
 
 function markList(sem, kind, attrs) {
@@ -359,7 +373,7 @@ export function plan(state, calc, openGroups = new Set()) {
 
 export function settings(state, theme, haptics) {
   const subj = state.subjects.map((s) => `
-    <div class="subject-edit ${s.droppedAfter ? 'dropped' : ''}">
+    <div class="subject-edit">
       <div class="line">
         <input type="text" value="${esc(s.name)}" data-field="name" data-sid="${s.id}" aria-label="Subject name" style="flex:1;min-width:140px">
         ${seg(`type-${s.id}`, [['LK', 'LK'], ['GK', 'GK']], s.type, 'set-type', 't', `data-sid="${s.id}"`, 'width:110px')}
@@ -373,11 +387,10 @@ export function settings(state, theme, haptics) {
           <select data-field="minCount" data-sid="${s.id}" ${s.type === 'LK' ? 'disabled' : ''}>
             ${[0, 1, 2, 3, 4].map((n) => `<option value="${n}" ${(s.type === 'LK' ? 4 : s.minCount ?? 0) === n ? 'selected' : ''}>${n}</option>`).join('')}
           </select></label>
-        <label>Dropped after
-          <select data-field="droppedAfter" data-sid="${s.id}" ${s.type === 'LK' ? 'disabled' : ''}>
-            ${['', 'Q1', 'Q2', 'Q3'].map((q) => `<option value="${q}" ${(s.droppedAfter || '') === q ? 'selected' : ''}>${q || '–'}</option>`).join('')}
-          </select></label>
         <button class="x" data-act="del-subject" data-sid="${s.id}" aria-label="Remove ${esc(s.name)}">×</button>
+      </div>
+      <div class="meta taken"><span>Taken</span>
+        <div class="chips">${RULES.semesters.map((q) => `<button data-act="toggle-taken" data-sid="${s.id}" data-q="${q}" aria-pressed="${semesterExists(s, q)}" ${s.type === 'LK' ? 'disabled' : ''}>${q}</button>`).join('')}</div>
       </div>
     </div>`).join('');
 
@@ -396,7 +409,7 @@ export function settings(state, theme, haptics) {
     <h2>Subjects</h2>
     <div class="rows">${subj}</div>
     <div class="actions"><button class="btn" data-act="add-subject">Add subject</button></div>
-    <p class="muted small">"Must count" = semesters of this subject that have to be brought into Block I (e.g. exam subjects: 4). The rest is filled with your best semesters. "Dropped after" (Abwahl) removes the later semesters; earlier grades stay.</p>
+    <p class="muted small">"Must count" = semesters of this subject that have to be brought into Block I (e.g. exam subjects: 4). The rest is filled with your best semesters. "Taken": untick a semester you did not take (nicht belegt), e.g. after dropping a subject (Abwahl). Strikes = semesters taken − ${RULES.blockI.courses}.</p>
 
     <h2>Exams</h2>
     <div class="rows">${exams}</div>

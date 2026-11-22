@@ -122,8 +122,9 @@ export function neededNextMark(sem, wK, target, which, w = 1) {
 
 /* ---------- Block I ---------- */
 
-/** Does this semester exist for the subject? (false after the subject was dropped) */
+/** Was this semester taken? (`taken` lists the semesters; old data may still use `droppedAfter`) */
 export function semesterExists(subject, q) {
+  if (Array.isArray(subject.taken)) return subject.taken.includes(q);
   const d = subject.droppedAfter;
   if (!d) return true;
   return RULES.semesters.indexOf(q) <= RULES.semesters.indexOf(d);
@@ -236,6 +237,7 @@ export function computeAll(state, overrides = {}) {
   const manual = courses.filter((c) => c.mode === 'strike').length;
   const notCounted = courses.filter((c) => !c.counted).length;
   const strikes = {
+    taken: courses.length,
     possible: Math.max(0, courses.length - RULES.blockI.courses),
     manual,
     auto: notCounted - manual,
