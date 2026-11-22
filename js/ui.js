@@ -1,7 +1,7 @@
 // Rendering: each view is a function returning an HTML string.
 import {
   RULES, TARGETS, totalToGrade, componentAverages, rawFromComponents,
-  neededComponent, neededNextMark, requiredUniformLevel,
+  neededComponent, neededNextMark, requiredUniformLevel, computeAll, semesterExists,
 } from './rules.js';
 
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -27,16 +27,25 @@ function picker(selected, act, extra = '') {
 }
 
 function stepper(value, act, attrs) {
+  const key = `step:${act}:${attrs.replace(/\W+/g, '')}`;
   return `<span class="stepper">
     <button data-act="${act}" data-d="-1" ${attrs} aria-label="minus">−</button>
-    <output>${isNum(value) ? pp(value) : '–'}</output>
+    <output data-anim="${key}" data-tick="${isNum(value) ? value : ''}">${isNum(value) ? pp(value) : '–'}</output>
     <button data-act="${act}" data-d="1" ${attrs} aria-label="plus">+</button></span>`;
+}
+
+/** Segmented control with a sliding thumb. options: [[value, label, disabled?]] */
+function seg(key, options, current, act, dataKey, attrs = '', style = '') {
+  const i = options.findIndex(([v]) => v === current);
+  return `<div class="seg" role="group" data-anim="seg:${key}" style="--n:${options.length};--i:${Math.max(0, i)};${style}" ${i < 0 ? 'data-none' : ''}>
+    ${options.map(([v, label, dis]) => `<button data-act="${act}" data-${dataKey}="${v}" ${attrs} aria-pressed="${v === current}" ${dis ? 'disabled' : ''}>${label}</button>`).join('')}
+  </div>`;
 }
 
 /* ---------------- Overview ---------------- */
 
 export function overview(state, calc) {
-  const { total, grade, b1, b2, statusCount, warnings } = calc;
+  const { total, grade, b1, b2, statusCount, warnings, strikes } = calc;
   const targets = [['1.3', 769], ['1.2', 787]];
   const tRows = targets.map(([g, t]) => {
     const d = total - t;
@@ -55,7 +64,7 @@ export function overview(state, calc) {
   for (const s of state.subjects) {
     for (const q of RULES.semesters) {
       const sem = s.semesters?.[q];
-      if (!sem || isNum(sem.final)) continue;
+      if (!sem || isNum(sem.final) || !semesterExists(s, q)) continue;
       const raw = rawFromComponents(sem, wKof(s));
       if (raw === null || raw >= 14.5) continue;
       const next = Math.round(raw) + 0.5;
@@ -72,28 +81,30 @@ export function overview(state, calc) {
     </button>`).join('');
 
   return `
-    <h1>Projected Abitur</h1>
     <div class="hero">
-      <div class="hero-grade">${g1(grade)}</div>
-      <div class="hero-side"><div class="hero-total">${total}<span class="muted"> / 900</span></div>
+      <div><div class="hero-label">Projected Abitur</div>
+        <div class="hero-grade" data-anim="grade" data-count="${grade ?? ''}" data-dec="1">${g1(grade)}</div></div>
+      <div class="hero-side"><div class="hero-total"><span data-anim="total" data-count="${total}">${total}</span><span class="muted"> / 900</span></div>
         <div class="muted small">points</div></div>
     </div>
     <div class="rows">${tRows}
-      <button class="row" data-act="tab" data-tab="plan"><span>Open items need for ${targetLabel(target)}</span><span>${reqText}</span></button>
+      <button class="row" data-act="tab" data-tab="plan"><span>Open items need for ${targetLabel(target)}</span><span class="chev">${reqText}</span></button>
     </div>
 
     <h2>Blocks</h2>
     <div class="rows">
       <div class="row" style="display:block">
-        <div style="display:flex;justify-content:space-between"><span>Block I · courses</span><span><strong>${b1.points}</strong><span class="muted"> / 600</span></span></div>
-        <div class="bar"><i style="width:${(b1.points / 6).toFixed(1)}%"></i></div>
+        <div style="display:flex;justify-content:space-between"><span>Block I · courses</span><span><strong data-anim="b1" data-count="${b1.points}">${b1.points}</strong><span class="muted"> / 600</span></span></div>
+        <div class="bar"><i data-anim="bar1" data-bar="${(b1.points / 6).toFixed(1)}" style="width:${(b1.points / 6).toFixed(1)}%"></i></div>
         <div class="row-sub" style="margin-top:6px">${b1.count} courses · Ø ${(b1.P / Math.max(1, b1.S)).toFixed(2)} weighted · ${b1.under5} under 05</div>
       </div>
       <div class="row" style="display:block">
-        <div style="display:flex;justify-content:space-between"><span>Block II · exams</span><span><strong>${b2.points}</strong><span class="muted"> / 300</span></span></div>
-        <div class="bar"><i style="width:${(b2.points / 3).toFixed(1)}%"></i></div>
+        <div style="display:flex;justify-content:space-between"><span>Block II · exams</span><span><strong data-anim="b2" data-count="${b2.points}">${b2.points}</strong><span class="muted"> / 300</span></span></div>
+        <div class="bar"><i data-anim="bar2" data-bar="${(b2.points / 3).toFixed(1)}" style="width:${(b2.points / 3).toFixed(1)}%"></i></div>
         <div class="row-sub" style="margin-top:6px">${b2.list.map((e) => pp(e.value)).join(' · ')} × ${RULES.blockII.multiplier}</div>
       </div>
+      <button class="row" data-act="tab" data-tab="courses"><span>Strikes<span class="row-sub">semesters not counted in Block I</span></span>
+        <span>${strikes.possible} possible<span class="row-sub">${strikes.manual} manual · ${strikes.auto} auto</span></span></button>
     </div>
 
     <h2>Basis of projection</h2>
@@ -118,13 +129,15 @@ export function courses(state, calc) {
   const map = new Map(calc.courses.map((c) => [c.key, c]));
   const rows = state.subjects.map((s) => {
     const cells = RULES.semesters.map((q) => {
+      if (!semesterExists(s, q)) return `<td><button class="cell" disabled aria-label="${esc(s.name)} ${q}: dropped">—</button></td>`;
       const c = map.get(`${s.id}:${q}`);
       const v = c ? pp(c.points) : '·';
+      const m = c?.mode && c.mode !== 'auto' ? c.mode : '';
       return `<td><button class="cell" data-act="open-sem" data-sid="${s.id}" data-q="${q}"
-        data-s="${c?.status ?? 'assumed'}" data-c="${c?.counted ? 1 : 0}"
-        aria-label="${esc(s.name)} ${q}: ${v}, ${c?.status ?? ''}">${v}</button></td>`;
+        data-s="${c?.status ?? 'assumed'}" data-c="${c?.counted ? 1 : 0}" ${m ? `data-m="${m}"` : ''}
+        aria-label="${esc(s.name)} ${q}: ${v}, ${c?.status ?? ''}${c && !c.counted ? ', not counted' : ''}${m ? `, ${m} set manually` : ''}">${v}</button></td>`;
     }).join('');
-    return `<tr><td class="name">${esc(s.name)}${s.type === 'LK' ? '<small>LK</small>' : ''}</td>${cells}</tr>`;
+    return `<tr><td class="name">${esc(s.name)}${s.type === 'LK' ? '<small>LK</small>' : ''}${s.droppedAfter ? `<em>dropped after ${s.droppedAfter}</em>` : ''}</td>${cells}</tr>`;
   }).join('');
   return `
     <h1>Courses</h1>
@@ -137,9 +150,11 @@ export function courses(state, calc) {
       <span style="color:var(--accent)">12 live</span>
       <span style="font-style:italic">12 planned</span>
       <span style="color:var(--muted);font-size:11px">11 assumed</span>
-      <span style="text-decoration:line-through">not counted</span>
+      <span style="text-decoration:line-through">struck</span>
+      <span><b style="color:var(--bad);font-size:10px">S</b> struck by you</span>
+      <span><b style="color:var(--accent);font-size:8px">●</b> forced to count</span>
     </div>
-    <p class="muted small">Tap a cell to enter a final grade, single marks, or an estimate. The best ${RULES.blockI.courses} semesters are counted automatically (LK semesters double).</p>
+    <p class="muted small">Tap a cell to enter grades or to strike / force a semester. ${calc.strikes.possible} strikes possible: the best ${RULES.blockI.courses} semesters count (LK semesters double).</p>
   `;
 }
 
@@ -159,9 +174,7 @@ export function semesterSheet(state, calc, ui) {
     <h3 class="sheet-title" id="sheet-title" tabindex="-1">${esc(s.name)} · ${q}</h3>
     <p class="muted small" style="margin:4px 0 14px">${s.type} · Klausur ${pct(wK)} / other ${pct(1 - wK)} ·
       counts now: <strong style="color:var(--text)">${c ? pp(c.points) : '–'}</strong> (${c ? STATUS_LABEL[c.status] : '–'}${c && !c.counted ? ', not counted' : ''})</p>
-    <div class="seg" role="group">
-      ${['final', 'marks', 'estimate'].map((m) => `<button data-act="sem-mode" data-m="${m}" aria-pressed="${mode === m}">${{ final: 'Final grade', marks: 'Marks', estimate: 'Estimate' }[m]}</button>`).join('')}
-    </div>`;
+    ${seg('sem-mode', [['final', 'Final grade'], ['marks', 'Marks'], ['estimate', 'Estimate']], mode, 'sem-mode', 'm')}`;
 
   let body = '';
   if (mode === 'final') {
@@ -177,7 +190,26 @@ export function semesterSheet(state, calc, ui) {
   }
   const overridden = mode !== 'final' && isNum(sem.final)
     ? `<div class="callout small">Final grade ${pp(sem.final)} is set and overrides this. Clear it under Final grade.</div>` : '';
-  return head + overridden + body;
+  return head + overridden + body + strikeSection(state, s, q, attrs);
+}
+
+function strikeSection(state, s, q, attrs) {
+  const sem = s.semesters?.[q] || {};
+  const lk = s.type === 'LK';
+  const cur = lk ? 'auto' : (sem.strike || 'auto');
+  // live effect of each option on Block I
+  const effect = ['auto', 'count', 'strike'].map((m) => {
+    if (lk && m === 'strike') return '<span>–</span>';
+    const st = structuredClone(state);
+    const t = st.subjects.find((x) => x.id === s.id);
+    t.semesters ||= {}; t.semesters[q] = { ...(t.semesters[q] || {}), strike: m };
+    const r = computeAll(st).b1;
+    return `<span>Block I <b>${r.points}</b>${r.count < RULES.blockI.courses ? `<br><span class="bad">only ${r.count} courses</span>` : ''}</span>`;
+  }).join('');
+  return `<h2>Counts in Block I</h2>
+    ${seg('strike', [['auto', 'Auto'], ['count', 'Count'], ['strike', 'Strike', lk]], cur, 'set-strike', 'v', attrs)}
+    <div class="effect">${effect}</div>
+    <p class="muted small">${lk ? 'LK semesters always count (double).' : 'Auto = counted only if it is among your best semesters. Strike = never counts. Count = always counts.'}</p>`;
 }
 
 function markList(sem, kind, attrs) {
@@ -268,7 +300,7 @@ export function plan(state, calc, openGroups = new Set()) {
   } else if (req.level === 0) {
     headline = `<div class="big good">Secured</div><p class="muted small">Reached even with 00 in every open item (admission rules aside).</p>`;
   } else {
-    headline = `<div class="big">Ø ${f1(req.level)} <span class="muted" style="font-size:18px;font-weight:500">points</span></div>
+    headline = `<div class="big">Ø <span data-anim="req" data-count="${req.level}" data-dec="1">${f1(req.level)}</span> <span class="muted" style="font-size:18px;font-weight:500">points</span></div>
       <p class="muted small">needed on average across ${req.open} open items (open semesters + exams) to reach ${target}.</p>`;
   }
 
@@ -278,7 +310,7 @@ export function plan(state, calc, openGroups = new Set()) {
     const openRows = (groups[q] = []);
     for (const s of state.subjects) {
       const sem = s.semesters?.[q] || {};
-      if (isNum(sem.final)) continue;
+      if (isNum(sem.final) || !semesterExists(s, q)) continue;
       const c = map.get(`${s.id}:${q}`);
       const hasItems = (sem.items || []).length > 0;
       const right = hasItems
@@ -325,12 +357,12 @@ export function plan(state, calc, openGroups = new Set()) {
 
 /* ---------------- Settings ---------------- */
 
-export function settings(state, theme) {
+export function settings(state, theme, haptics) {
   const subj = state.subjects.map((s) => `
-    <div class="subject-edit">
+    <div class="subject-edit ${s.droppedAfter ? 'dropped' : ''}">
       <div class="line">
         <input type="text" value="${esc(s.name)}" data-field="name" data-sid="${s.id}" aria-label="Subject name" style="flex:1;min-width:140px">
-        <div class="seg" style="width:110px">${['LK', 'GK'].map((t) => `<button data-act="set-type" data-t="${t}" data-sid="${s.id}" aria-pressed="${s.type === t}">${t}</button>`).join('')}</div>
+        ${seg(`type-${s.id}`, [['LK', 'LK'], ['GK', 'GK']], s.type, 'set-type', 't', `data-sid="${s.id}"`, 'width:110px')}
       </div>
       <div class="meta">
         <label>Klausur
@@ -340,6 +372,10 @@ export function settings(state, theme) {
         <label>Must count
           <select data-field="minCount" data-sid="${s.id}" ${s.type === 'LK' ? 'disabled' : ''}>
             ${[0, 1, 2, 3, 4].map((n) => `<option value="${n}" ${(s.type === 'LK' ? 4 : s.minCount ?? 0) === n ? 'selected' : ''}>${n}</option>`).join('')}
+          </select></label>
+        <label>Dropped after
+          <select data-field="droppedAfter" data-sid="${s.id}" ${s.type === 'LK' ? 'disabled' : ''}>
+            ${['', 'Q1', 'Q2', 'Q3'].map((q) => `<option value="${q}" ${(s.droppedAfter || '') === q ? 'selected' : ''}>${q || '–'}</option>`).join('')}
           </select></label>
         <button class="x" data-act="del-subject" data-sid="${s.id}" aria-label="Remove ${esc(s.name)}">×</button>
       </div>
@@ -360,7 +396,7 @@ export function settings(state, theme) {
     <h2>Subjects</h2>
     <div class="rows">${subj}</div>
     <div class="actions"><button class="btn" data-act="add-subject">Add subject</button></div>
-    <p class="muted small">"Must count" = semesters of this subject that have to be brought into Block I (e.g. exam subjects: 4). The rest is filled with your best semesters.</p>
+    <p class="muted small">"Must count" = semesters of this subject that have to be brought into Block I (e.g. exam subjects: 4). The rest is filled with your best semesters. "Dropped after" (Abwahl) removes the later semesters; earlier grades stay.</p>
 
     <h2>Exams</h2>
     <div class="rows">${exams}</div>
@@ -368,7 +404,8 @@ export function settings(state, theme) {
     <h2>Projection</h2>
     <div class="rows">
       <div class="row"><span>Assume for empty semesters / exams</span>${stepper(state.settings.assume, 'step-assume', '')}</div>
-      <div class="row"><span>Theme</span><div class="seg" style="width:180px">${['auto', 'light', 'dark'].map((t) => `<button data-act="set-theme" data-t="${t}" aria-pressed="${theme === t}">${t}</button>`).join('')}</div></div>
+      <div class="row"><span>Theme</span>${seg('theme', [['auto', 'auto'], ['light', 'light'], ['dark', 'dark']], theme, 'set-theme', 't', '', 'width:180px')}</div>
+      <div class="row"><span>Haptics<span class="row-sub">vibration tick on taps (iPhone: iOS 18+)</span></span>${seg('haptics', [['on', 'on'], ['off', 'off']], haptics ? 'on' : 'off', 'set-haptics', 'v', '', 'width:120px')}</div>
     </div>
 
     <h2>Backup</h2>

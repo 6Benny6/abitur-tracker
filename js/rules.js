@@ -122,10 +122,19 @@ export function neededNextMark(sem, wK, target, which, w = 1) {
 
 /* ---------- Block I ---------- */
 
+/** Does this semester exist for the subject? (false after the subject was dropped) */
+export function semesterExists(subject, q) {
+  const d = subject.droppedAfter;
+  if (!d) return true;
+  return RULES.semesters.indexOf(q) <= RULES.semesters.indexOf(d);
+}
+
 /**
- * Choose the courses for Block I: for each subject its best `minCount`
- * semesters are mandatory (LKs: all 4), then fill up to RULES.blockI.courses
- * with the best remaining semesters.
+ * Choose the courses for Block I:
+ * 1. manually struck semesters are excluded (LK semesters cannot be struck)
+ * 2. manually forced semesters are counted
+ * 3. per subject its best `minCount` semesters are mandatory (LKs: all 4)
+ * 4. fill up to RULES.blockI.courses with the best remaining semesters
  */
 export function selectBlockI(state, overrides = {}) {
   const assume = state.settings?.assume ?? 10;
@@ -133,29 +142,34 @@ export function selectBlockI(state, overrides = {}) {
   for (const s of state.subjects) {
     const wK = s.wK ?? (s.type === 'LK' ? 0.5 : 1 / 3);
     for (const q of RULES.semesters) {
+      if (!semesterExists(s, q)) continue;
       const key = `${s.id}:${q}`;
+      const sem = s.semesters?.[q];
       const r = key in overrides
         ? { points: overrides[key], status: 'planned' }
-        : resolveSemester(s.semesters?.[q], wK, assume);
+        : resolveSemester(sem, wK, assume);
       if (!isNum(r.points)) continue;
-      all.push({ key, subjectId: s.id, name: s.name, q, lk: s.type === 'LK', ...r });
+      const lk = s.type === 'LK';
+      const mode = lk && sem?.strike === 'strike' ? 'auto' : (sem?.strike || 'auto');
+      all.push({ key, subjectId: s.id, name: s.name, q, lk, mode, ...r });
     }
   }
   const byPoints = (a, b) => b.points - a.points;
   const chosen = new Set();
+  const pool = all.filter((c) => c.mode !== 'strike');
+  pool.filter((c) => c.mode === 'count').forEach((c) => chosen.add(c.key));
   for (const s of state.subjects) {
     const min = s.type === 'LK' ? 4 : clamp(s.minCount ?? 0, 0, 4);
-    all.filter((c) => c.subjectId === s.id).sort(byPoints).slice(0, min)
+    const mine = pool.filter((c) => c.subjectId === s.id);
+    const have = mine.filter((c) => chosen.has(c.key)).length;
+    mine.filter((c) => !chosen.has(c.key)).sort(byPoints).slice(0, Math.max(0, min - have))
       .forEach((c) => chosen.add(c.key));
   }
-  // fill with best rest; prefer GK rest (LK are all mandatory anyway)
-  const rest = all.filter((c) => !chosen.has(c.key)).sort(byPoints);
-  for (const c of rest) {
+  for (const c of pool.filter((x) => !chosen.has(x.key)).sort(byPoints)) {
     if (chosen.size >= RULES.blockI.courses) break;
     chosen.add(c.key);
   }
-  const courses = all.map((c) => ({ ...c, counted: chosen.has(c.key) }));
-  return courses;
+  return all.map((c) => ({ ...c, counted: chosen.has(c.key) }));
 }
 
 export function blockI(courses) {
@@ -212,11 +226,26 @@ export function computeAll(state, overrides = {}) {
   if (b2.at5 < RULES.blockII.minExamsAt5) warnings.push(`Fewer than ${RULES.blockII.minExamsAt5} exams with 05+ points.`);
   if (RULES.blockII.lkAt5 && !b2.lkAt5) warnings.push('No LK exam with 05+ points.');
 
+  const forced = courses.filter((c) => c.mode === 'count').length;
+  if (forced > RULES.blockI.courses) warnings.push(`${forced} semesters forced to count (max ${RULES.blockI.courses}).`);
+  for (const s of state.subjects) {
+    const min = s.type === 'LK' ? 4 : (s.minCount ?? 0);
+    const n = courses.filter((c) => c.subjectId === s.id && c.counted).length;
+    if (n < min) warnings.push(`${s.name}: ${n} of ${min} required semesters counted.`);
+  }
+  const manual = courses.filter((c) => c.mode === 'strike').length;
+  const notCounted = courses.filter((c) => !c.counted).length;
+  const strikes = {
+    possible: Math.max(0, courses.length - RULES.blockI.courses),
+    manual,
+    auto: notCounted - manual,
+  };
+
   const statusCount = { final: 0, live: 0, planned: 0, assumed: 0 };
   courses.filter((c) => c.counted).forEach((c) => statusCount[c.status]++);
   b2.list.forEach((e) => statusCount[e.status]++);
 
-  return { courses, b1, b2, total, grade, warnings, statusCount };
+  return { courses, b1, b2, total, grade, warnings, statusCount, strikes };
 }
 
 /**
@@ -230,7 +259,7 @@ export function requiredUniformLevel(state, targetTotal) {
   for (const s of state.subjects) {
     for (const q of RULES.semesters) {
       const sem = s.semesters?.[q];
-      if (!isNum(sem?.final)) openKeys.push(`${s.id}:${q}`);
+      if (semesterExists(s, q) && !isNum(sem?.final)) openKeys.push(`${s.id}:${q}`);
     }
   }
   const openExams = state.exams.filter((e) => !(isNum(e.points) && !e.planned)).map((e) => `exam:${e.id}`);

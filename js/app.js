@@ -2,10 +2,17 @@
 import { computeAll, RULES } from './rules.js';
 import { load, save, exportJSON, importJSON, reset, uid } from './state.js';
 import * as V from './ui.js';
+import { animate, pop, haptic, setHaptics, swipeToClose, reducedMotion } from './motion.js';
+import { mountContours } from './contours.js';
 
 let state = load();
 const ui = { tab: 'overview', sheet: null, openGroups: new Set() };
 let opener = null; // selector of the control that opened the sheet
+let lastTap = null; // selector of the control just tapped (gets a "pop" after re-render)
+let lastTab = null;
+const TABS = ['overview', 'courses', 'plan', 'settings'];
+const hapticsOn = () => state.settings.haptics !== false;
+setHaptics(hapticsOn());
 const $view = document.getElementById('view');
 const $sheet = document.getElementById('sheet');
 const $sheetBody = document.getElementById('sheet-body');
@@ -27,17 +34,25 @@ function render() {
   const calc = computeAll(state);
   const views = { overview: V.overview, courses: V.courses, plan: (st, c) => V.plan(st, c, ui.openGroups) };
   const scroll = window.scrollY;
-  $view.innerHTML = ui.tab === 'settings' ? V.settings(state, theme) : views[ui.tab](state, calc);
+  $view.innerHTML = ui.tab === 'settings' ? V.settings(state, theme, hapticsOn()) : views[ui.tab](state, calc);
   window.scrollTo(0, scroll);
   document.querySelectorAll('.tabs button').forEach((b) => {
     if (b.dataset.tab === ui.tab) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
   });
+  document.querySelector('.tabs-in').style.setProperty('--i', TABS.indexOf(ui.tab));
+  document.body.classList.toggle('home', ui.tab === 'overview');
+  if (lastTab !== ui.tab) {
+    $view.classList.remove('enter'); $view.getBoundingClientRect(); $view.classList.add('enter');
+    lastTab = ui.tab;
+  }
+  animate($view);
   if (ui.sheet) {
     const wasHidden = $sheet.hidden;
     const top = $sheet.querySelector('.sheet-panel').scrollTop;
     $sheetBody.innerHTML = V.semesterSheet(state, calc, ui.sheet);
     $sheet.hidden = false;
     $sheet.querySelector('.sheet-panel').scrollTop = top;
+    animate($sheetBody);
     const label = document.getElementById('add-label');
     if (label) label.focus({ preventScroll: true });
     else if (wasHidden) document.getElementById('sheet-title')?.focus({ preventScroll: true });
@@ -46,6 +61,18 @@ function render() {
     if (opener) document.querySelector(opener)?.focus({ preventScroll: true });
     opener = null;
   }
+}
+
+function afterTap() {
+  pop(document, lastTap);
+  lastTap = null;
+}
+
+function closeSheet() {
+  if (!ui.sheet) return;
+  if (reducedMotion()) { ui.sheet = null; render(); return; }
+  $sheet.classList.add('closing');
+  setTimeout(() => { $sheet.classList.remove('closing'); ui.sheet = null; render(); }, 220);
 }
 
 function commit() {
@@ -148,6 +175,8 @@ const actions = {
     commit();
   },
   'step-assume': (d) => { state.settings.assume = clamp(state.settings.assume + +d.d); commit(); },
+  'set-strike': (d) => { sem(d.sid, d.q).strike = d.v; commit(); },
+  'set-haptics': (d) => { state.settings.haptics = d.v === 'on'; setHaptics(hapticsOn()); commit(); if (hapticsOn()) haptic(); },
   'set-theme': (d) => {
     theme = d.t; try { localStorage.setItem(THEME_KEY, theme); } catch { /* ignore */ }
     applyTheme(); render();
@@ -176,11 +205,18 @@ function keepLabel() {
 
 document.addEventListener('click', (ev) => {
   const close = ev.target.closest('[data-close]');
-  if (close) { ui.sheet = null; render(); return; }
+  if (close) { closeSheet(); return; }
   const el = ev.target.closest('[data-act], .tabs button');
-  if (!el || el.matches('input[type="checkbox"]')) return;
+  if (!el || el.matches('input[type="checkbox"]') || el.disabled) return;
   const act = el.dataset.act || 'tab';
+  if (act !== 'set-haptics') haptic();
+  // remember which control was tapped so it can "pop" after the re-render
+  lastTap = el.dataset.act
+    ? `[data-act="${act}"]` + Object.entries(el.dataset).filter(([k]) => k !== 'act')
+      .map(([k, v]) => `[data-${k.replace(/[A-Z]/g, (c) => '-' + c.toLowerCase())}="${CSS.escape(v)}"]`).join('')
+    : `.tabs button[data-tab="${el.dataset.tab}"]`;
   actions[act]?.(el.dataset, el);
+  afterTap();
 });
 
 document.addEventListener('change', async (ev) => {
@@ -191,6 +227,7 @@ document.addEventListener('change', async (ev) => {
   if (f === 'name') { subj(el.dataset.sid).name = el.value.trim() || 'Subject'; }
   else if (f === 'wK') { subj(el.dataset.sid).wK = +el.value; }
   else if (f === 'minCount') { subj(el.dataset.sid).minCount = +el.value; }
+  else if (f === 'droppedAfter') { subj(el.dataset.sid).droppedAfter = el.value || null; haptic(); }
   else if (f === 'exam-label') { state.exams.find((e) => e.id === el.dataset.id).label = el.value.trim() || 'Exam'; }
   else if (f === 'exam-subject') { state.exams.find((e) => e.id === el.dataset.id).subjectId = el.value || null; }
   else if (f === 'exam-final') { state.exams.find((e) => e.id === el.dataset.id).planned = !el.checked; }
@@ -205,7 +242,7 @@ document.addEventListener('change', async (ev) => {
 
 document.addEventListener('keydown', (ev) => {
   if (!ui.sheet) return;
-  if (ev.key === 'Escape') { ui.sheet = null; render(); return; }
+  if (ev.key === 'Escape') { closeSheet(); return; }
   if (ev.key === 'Tab') { // keep focus inside the open sheet
     const f = [...$sheet.querySelectorAll('button, input, select, [tabindex="0"]')].filter((el) => !el.disabled && el.offsetParent);
     if (!f.length) return;
@@ -215,6 +252,8 @@ document.addEventListener('keydown', (ev) => {
   }
 });
 
+mountContours();
+swipeToClose($sheet, closeSheet);
 render();
 
 if ('serviceWorker' in navigator && location.protocol === 'https:') {

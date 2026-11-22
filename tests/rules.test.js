@@ -112,3 +112,40 @@ test('required uniform level', () => {
   const unreachable = requiredUniformLevel(makeState(0, 0, 0), 769);
   assert.equal(unreachable.reachable, false);
 });
+
+test('manual strike excludes a semester, LK cannot be struck', () => {
+  const st = makeState(12, 13, 12);
+  st.subjects[2].semesters.Q1 = { final: 15, strike: 'strike' };
+  st.subjects[0].semesters.Q1 = { final: 13, strike: 'strike' }; // LK: ignored
+  const all = computeAll(st);
+  const c = all.courses.find((x) => x.key === 'g0:Q1');
+  assert.equal(c.counted, false);
+  assert.equal(all.courses.find((x) => x.key === 'en:Q1').counted, true);
+  assert.equal(all.strikes.manual, 1);
+  assert.equal(all.strikes.possible, 8); // 48 available - 40
+  assert.equal(all.strikes.manual + all.strikes.auto, 8);
+});
+
+test('forced count beats a better course', () => {
+  const st = makeState(12, 13, 12);
+  st.subjects[2].semesters.Q1 = { final: 4, strike: 'count' };
+  assert.equal(computeAll(st).courses.find((x) => x.key === 'g0:Q1').counted, true);
+});
+
+test('dropped subject loses later semesters everywhere', () => {
+  const st = makeState(12, 13, 12);
+  st.subjects[11].droppedAfter = 'Q2';
+  for (const s of st.subjects) s.semesters.Q4 = {};
+  const all = computeAll(st);
+  assert.equal(all.courses.some((c) => c.key === 'g9:Q3' || c.key === 'g9:Q4'), false);
+  assert.equal(all.courses.length, 46);
+  // solver: 12 Q4 semesters open minus the dropped one = 11 + 0 open exams
+  assert.equal(requiredUniformLevel(st, 700).open, 11);
+});
+
+test('must-count violation warns', () => {
+  const st = makeState(12, 13, 12);
+  st.subjects[2].minCount = 4;
+  st.subjects[2].semesters.Q1 = { final: 12, strike: 'strike' };
+  assert.match(computeAll(st).warnings.join(' '), /3 of 4 required/);
+});

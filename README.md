@@ -8,7 +8,8 @@ Phone-first tracker for the Berlin Abitur (VO-GO): shows the projected final gra
 3. **Courses** → tap a cell → enter a final grade (Q1/Q2), single marks (Q3) or an estimate (Q4).
 4. **Overview** → projected grade, Block I/II, cheapest next points.
 5. **Plan** → pick a target, see the average you need, play with what-if values.
-6. **Settings** → edit subjects, LK/GK, Klausur share, exams. **Export a backup** regularly.
+6. **Settings** → edit subjects, LK/GK, Klausur share, exams, "Dropped after" (Abwahl), haptics. **Export a backup** regularly.
+7. **Strike / force a semester**: tap a grade cell → *Counts in Block I*: Auto · Count · Strike. The overview shows how many strikes are possible.
 
 Your grades are stored only in your phone's browser, never in this repository.
 
@@ -21,8 +22,12 @@ No build step: the files here are exactly what runs.
 | `js/state.js` | Saving / backup |
 | `js/ui.js` | What each screen shows |
 | `js/app.js` | What happens on a tap |
+| `js/motion.js` | Animations, haptics, swipe-to-close |
+| `js/contours.js` | Contour-line decoration on the overview |
 | `css/styles.css` | Look (colours at the top) |
 | `tests/rules.test.js` | Checks the maths: `npm test` |
+
+Preview in a drawn iPhone (for the Claude chat): `npm run preview` writes `preview/iphone.html` (demo data, not committed).
 
 When you change files, bump `CACHE` in `sw.js` (e.g. `abitur-v2`) so phones pick up the new version.
 
