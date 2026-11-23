@@ -3,23 +3,23 @@
 <style>
 /* Layout: one stage — the phone, with a short notes column beside it on wide screens, below it on phones. */
 :root {
-  --ground: #e7effc;
+  --ground: #e9e9ef;
   --ink: #0f1c33;
   --muted: #56647e;
-  --accent: #1b66d6;
-  --line: #d3def0;
+  --accent: #0066d6;
+  --line: #d1d1d6;
   --chip: #ffffff;
   --bezel: #1c1f26;
   --bezel-edge: #3a3f4a;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --ground: #0a101c; --ink: #e8eefb; --muted: #93a1bd; --accent: #6ea8ff; --line: #22304a; --chip: #121b2d;
+    --ground: #0b0b0d; --ink: #ffffff; --muted: #98989f; --accent: #409cff; --line: #38383a; --chip: #1c1c1e;
     --bezel: #05070b; --bezel-edge: #2a303c; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --ground: #0a101c; --ink: #e8eefb; --muted: #93a1bd; --accent: #6ea8ff; --line: #22304a; --chip: #121b2d;
+  --ground: #0b0b0d; --ink: #ffffff; --muted: #98989f; --accent: #409cff; --line: #38383a; --chip: #1c1c1e;
   --bezel: #05070b; --bezel-edge: #2a303c; color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -103,10 +103,10 @@ a { color: var(--accent); }
     <h1>Abitur Tracker</h1>
     <p>The real app, running inside a model iPhone. The grades here are examples. Your own grades stay in the app on your phone.</p>
     <ul class="try">
-      <li><b>Courses</b><span>Tap a grade, then Auto · Count · Strike. Block I updates live.</span></li>
-      <li><b>History Q3</b><span>A bad Klausur (06): see which oral grade recovers it.</span></li>
-      <li><b>Plan</b><span>Switch the target between 1.3 and 1.2.</span></li>
-      <li><b>Settings</b><span>"Taken" chips: untick semesters you did not take (see Philosophy → Music). Strikes = taken − 40.</span></li>
+      <li><b>History</b><span>Q3: a bad Klausur (06). The sheet shows which "other" average gets you the next point.</span></li>
+      <li><b>Goal</b><span>Switch between 1.3 and 1.2 and watch the needed average change.</span></li>
+      <li><b>Strike</b><span>Open any GK subject and flip "Strike" on a semester.</span></li>
+      <li><b>Settings</b><span>The gear: subjects, exam roles, "Taken" per semester.</span></li>
     </ul>
     <div class="controls">
       <div class="seg" role="group" aria-label="Phone theme">
@@ -137,9 +137,9 @@ function syncTheme() {
   if (!doc || !doc.documentElement) return;
   const dark = phoneTheme === 'auto' ? hostDark() : phoneTheme === 'dark';
   doc.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
-  document.querySelector('.status').style.color = dark ? '#e8eefb' : '#0f1c33';
-  document.querySelector('.screen').style.background = dark ? '#0b1220' : '#eef4fd';
-  document.querySelector('.home-ind').style.background = dark ? '#e8eefb' : '#0f1c33';
+  document.querySelector('.status').style.color = dark ? '#ffffff' : '#000000';
+  document.querySelector('.screen').style.background = dark ? '#000000' : '#f2f2f7';
+  document.querySelector('.home-ind').style.background = dark ? '#ffffff' : '#000000';
 }
 function load() { frame.srcdoc = APP; }
 frame.addEventListener('load', syncTheme);

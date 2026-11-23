@@ -1,38 +1,39 @@
 # Abitur Tracker
 
-Phone-first tracker for the Berlin Abitur (VO-GO): shows the projected final grade, and what each remaining Klausur, oral mark, semester and exam must be to reach a target (e.g. 1.3 = 769 points, 1.2 = 787).
+Phone app for the Berlin Abitur 2027: your projected grade, and what you still need for 1.3 or 1.2.
+
+Live: https://6benny6.github.io/abitur-tracker/ (Safari → Share → Add to Home Screen)
 
 ## Use it
-1. Open the GitHub Pages link on your phone (Safari).
-2. Share → **Add to Home Screen**. It now works like an app, also offline.
-3. **Courses** → tap a cell → enter a final grade (Q1/Q2), single marks (Q3) or an estimate (Q4).
-4. **Overview** → projected grade, Block I/II, cheapest next points.
-5. **Plan** → pick a target, see the average you need, play with what-if values.
-6. **Settings** → edit subjects, LK/GK, Klausur share, exams, "Taken" chips per subject (untick semesters you did not take / dropped), haptics. **Export a backup** regularly.
-7. **Strike / force a semester**: tap a grade cell → *Counts in Block I*: Auto · Count · Strike. Strikes possible = semesters taken − 40 (48 taken = 8 strikes). When all are used, Strike is disabled.
+- **Home**: projected grade, points out of 900, the average you still need, Block I and II, and anything that breaks a rule.
+- **Tap a subject**: enter per semester the Klausur grade(s) and your "other" average (oral etc.), or the report grade once it is out. The app applies the official weighting and tells you what you need for the next point. GK semesters have a **Strike** switch.
+- **Tap an exam**: expected or real points for the 5 exam components.
+- **Gear**: subjects (LK/GK, area, exam role, semesters taken), expected points, backup.
 
-Your grades are stored only in your phone's browser, never in this repository.
+Grades stay on your phone only. Export a backup now and then.
 
-## How it is built
-No build step: the files here are exactly what runs.
+## Rules used (Berlin, Abitur 2027)
+| | |
+|---|---|
+| Block I | all 8 LK semesters ×2 + exactly 24 GK semesters (max 600, min 200) |
+| Strikes | GK semesters taken − 24, chosen automatically (you can strike manually) |
+| Must count | all GK semesters of the 3rd/4th exam subject; last semester of the 5th component; 2 semesters each in German, a foreign language, maths, a science, a social science |
+| Limits | no counted 00; max 2 LK and 4 GK under 05 |
+| Block II | 5 components ×4 (max 300, min 100; 2 of the 4 exam subjects at 05+, one an LK) |
+| Semester grade | 1 Klausur = 1/3, 2 Klausuren = 1/2 (LK Q1–Q3), LK Q4 = 1/3 |
+| Grade | 17/3 − points/180, truncated (1.3 ≥ 769, 1.2 ≥ 787) |
 
+Confirm details with your Oberstufenkoordination. All constants are at the top of `js/rules.js`.
+
+## Code
 | File | Role |
 |---|---|
-| `js/rules.js` | All grade maths (rules in the `RULES` object at the top) |
-| `js/state.js` | Saving / backup |
-| `js/ui.js` | What each screen shows |
-| `js/app.js` | What happens on a tap |
-| `js/motion.js` | Animations, haptics, swipe-to-close |
-| `js/contours.js` | Contour-line decoration on the overview |
-| `css/styles.css` | Look (colours at the top) |
-| `tests/rules.test.js` | Checks the maths: `npm test` |
+| `js/rules.js` | all grade maths |
+| `js/state.js` | saving, backup, migration of old data |
+| `js/ui.js` | what the screens show |
+| `js/app.js` | what happens on a tap |
+| `js/motion.js` | small animations, haptics, swipe to close |
+| `css/styles.css` | look |
+| `tests/rules.test.js` | `npm test` |
 
-Preview in a drawn iPhone (for the Claude chat): `npm run preview` writes `preview/iphone.html` (demo data, not committed).
-
-When you change files, bump `CACHE` in `sw.js` (e.g. `abitur-v2`) so phones pick up the new version.
-
-## Rules used (verify against your school's handout)
-- Block I: best 40 semester courses, 8 LK semesters double, E = P / S × 40 (max 600, min 200, max 8 under 05).
-- Block II: 5 exam components × 4 (max 300, min 100, ≥ 3 at 05+ incl. one LK).
-- Grade = 17/3 − E/180, truncated to one decimal.
-- Semester grade estimate: GK 33 % Klausur / 67 % other, LK 50 / 50, rounded x.5 up. The teacher's actual grade can deviate.
+`npm run preview` builds `preview/iphone.html` (the app in a drawn iPhone, demo data). After changing files, bump `CACHE` in `sw.js` so phones load the new version.

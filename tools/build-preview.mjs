@@ -7,7 +7,7 @@ const root = new URL('../', import.meta.url);
 const read = (p) => readFileSync(new URL(p, root), 'utf8');
 
 /* ---- 1. bundle the ES modules into one classic script ---- */
-const ORDER = ['rules', 'state', 'motion', 'contours', 'ui', 'app'];
+const ORDER = ['rules', 'state', 'motion', 'ui', 'app'];
 function wrap(name) {
   let code = read(`js/${name}.js`);
   code = code.replace(/import\s*\{([^}]*)\}\s*from\s*'\.\/(\w+)\.js';/g, (_, names, mod) => `const {${names}} = __${mod};`);
@@ -21,21 +21,17 @@ function wrap(name) {
 const DEMO = `
 (() => {
   const K = 'abitur-tracker:v1';
-  try { if (localStorage.getItem(K)) return; } catch { return; }
+  try { const old = JSON.parse(localStorage.getItem(K) || 'null'); if (old && old.schema === 2) return; } catch { return; }
   const s = __state.defaultState();
-  s.settings.assume = 12;
-  const fin = { English: [13, 14], Mathematics: [12, 13], German: [12, 11], History: [13, 12], Politics: [12, 13], Biology: [11, 12], Physics: [10, 11], French: [12, 12], Art: [14, 14], Sport: [13, 13], Geography: [9, 10], Music: [12, 12] };
-  for (const sub of s.subjects) { const [a, c] = fin[sub.name] || [12, 12]; sub.semesters.Q1 = { final: a }; sub.semesters.Q2 = { final: c }; }
+  s.settings.expect = 12;
+  const fin = { English: [13, 14], Mathematics: [12, 13], German: [12, 11], History: [13, 12], Biology: [11, 12], Politics: [12, 13], Physics: [10, 11], French: [12, 12], Art: [14, 14], Sport: [13, 13] };
+  for (const sub of s.subjects) { const [a, c] = fin[sub.name] || [12, 12]; sub.sem.Q1 = { final: a }; sub.sem.Q2 = { final: c }; }
   const by = (n) => s.subjects.find((x) => x.name === n);
-  const it = (id, kind, points, label) => ({ id, kind, points, label, weight: 1 });
-  by('History').semesters.Q3 = { items: [it('a', 'K', 6, 'Klausur 1'), it('b', 'O', 12, 'Oral')] };
-  by('Mathematics').semesters.Q3 = { items: [it('c', 'K', 11, 'Klausur 1'), it('d', 'O', 13, 'Oral')] };
-  by('English').semesters.Q3 = { items: [it('e', 'K', 14, 'Klausur 1'), it('f', 'O', 13, 'Oral')] };
-  // Philosophy in Q1/Q2, then swapped for Music in Q3/Q4: still 48 semesters taken = 8 strikes
-  by('Music').taken = ['Q3', 'Q4'];
-  delete by('Music').semesters.Q1; delete by('Music').semesters.Q2;
-  s.subjects.push({ id: 'phil', name: 'Philosophy', type: 'GK', wK: 1 / 3, minCount: 0, taken: ['Q1', 'Q2'], semesters: { Q1: { final: 12 }, Q2: { final: 11 } } });
-  by('Physics').semesters.Q1.strike = 'strike';
+  by('English').sem.Q3 = { k1: 14, k2: 12, o: 13.5 };
+  by('Mathematics').sem.Q3 = { k1: 11, o: 13 };
+  by('History').sem.Q3 = { k1: 6, o: 12 };
+  by('Physics').sem.Q1.strike = true;
+  s.exams.PF1.points = 13; s.exams.PF2.points = 12;
   try { localStorage.setItem(K, JSON.stringify(s)); } catch {}
 })();`;
 
@@ -46,9 +42,8 @@ const body = read('index.html').match(/<body>([\s\S]*)<\/body>/)[1].replace(/<sc
 const deviceCSS = `
 /* inside the drawn phone: room for status bar + home indicator */
 main { padding-top: 62px !important; }
-.tabs { padding-bottom: 20px !important; }
-.sheet-panel { max-height: calc(100% - 56px) !important; padding-bottom: 36px !important; }
-.toast { bottom: 96px !important; }
+.sheet-panel { max-height: calc(100% - 56px) !important; padding-bottom: 40px !important; }
+main { padding-bottom: 40px !important; }
 html { scrollbar-width: none; } ::-webkit-scrollbar { display: none; }`;
 const appDoc = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <style>${read('css/styles.css')}${deviceCSS}</style></head><body>${body}<script>${bundle}<\/script></body></html>`;
